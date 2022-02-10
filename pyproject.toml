@@ -1,0 +1,20 @@
+[tool.poetry]
+name = "radosgw_usage_exporter"
+version = "0.1.0"
+description = "Prometheus exporter for scraping Ceph RADOSGW usage data."
+authors = [""]
+license = "MIT License"
+
+[tool.poetry.dependencies]
+python = "^3.10"
+prometheus-client = "^0.13.1"
+requests = "^2.27.1"
+requests-aws = "^0.1.8"
+
+[tool.poetry.dev-dependencies]
+flake8 = "^4.0.1"
+autopep8 = "^1.6.0"
+
+[build-system]
+requires = ["poetry-core>=1.0.0"]
+build-backend = "poetry.core.masonry.api"

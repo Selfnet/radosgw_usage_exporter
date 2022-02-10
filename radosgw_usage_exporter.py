@@ -1,20 +1,22 @@
 #!/usr/bin/python
 # -*- coding: utf-8 -*-
 
-import time
-import requests
-import warnings
-import logging
-import json
 import argparse
+import json
+import logging
 import os
+import time
+import warnings
+from asyncio.log import logger
+from collections import Counter, defaultdict
+
+import requests
 from awsauth import S3Auth
 from prometheus_client import start_http_server
-from collections import defaultdict, Counter
-from prometheus_client.core import GaugeMetricFamily, CounterMetricFamily, REGISTRY
+from prometheus_client.core import (REGISTRY, CounterMetricFamily,
+                                    GaugeMetricFamily)
 
-logging.basicConfig(level=logging.DEBUG)
-DEBUG = int(os.environ.get('DEBUG', '0'))
+logging.basicConfig(level=logging.INFO)
 
 
 class RADOSGWCollector(object):
@@ -45,7 +47,6 @@ class RADOSGWCollector(object):
         # Prepare Requests Session
         self._session()
 
-
     def collect(self):
         """
         * Collect 'usage' data:
@@ -61,7 +62,8 @@ class RADOSGWCollector(object):
         # setup dict for aggregating bucket usage accross "bins"
         self.usage_dict = defaultdict(dict)
 
-        rgw_usage = self._request_data(query='usage', args='show-summary=False')
+        rgw_usage = self._request_data(
+            query='usage', args='show-summary=False')
         rgw_bucket = self._request_data(query='bucket', args='stats=True')
         rgw_users = self._get_rgw_users()
 
@@ -87,7 +89,6 @@ class RADOSGWCollector(object):
         for metric in self._prometheus_metrics.values():
             yield metric
 
-
     def _session(self):
         """
         Setup Requests connection settings.
@@ -102,10 +103,9 @@ class RADOSGWCollector(object):
         # Inversion of condition, when '--insecure' is defined we disable
         # requests warning about certificate hostname mismatch.
         if not self.insecure:
-            warnings.filterwarnings('ignore', message='Unverified HTTPS request')
-        if DEBUG:
-            print("Perform insecured requests")
-
+            warnings.filterwarnings(
+                'ignore', message='Unverified HTTPS request')
+        logger.debug("Perform insecured requests")
 
     def _request_data(self, query, args):
         """
@@ -121,8 +121,7 @@ class RADOSGWCollector(object):
                                                     self.host))
 
             if response.status_code == requests.codes.ok:
-                if DEBUG:
-                    print(response)
+                logger.debug(response)
                 return response.json()
             else:
                 # Usage caps absent or wrong admin entry
@@ -134,7 +133,6 @@ class RADOSGWCollector(object):
         except requests.exceptions.RequestException as e:
             print("Request error: {0}".format(e))
             return
-
 
     def _setup_empty_prometheus_metrics(self):
         """
@@ -238,8 +236,7 @@ class RADOSGWCollector(object):
             self.usage_dict[bucket_owner] = defaultdict(dict)
 
         for bucket in entry['buckets']:
-            if DEBUG:
-                print(json.dumps(bucket, indent=4, sort_keys=True))
+            logger.debug(json.dumps(bucket, indent=4, sort_keys=True))
 
             if not bucket['bucket']:
                 bucket_name = "bucket_root"
@@ -252,12 +249,13 @@ class RADOSGWCollector(object):
             for category in bucket['categories']:
                 category_name = category['category']
                 if category_name not in self.usage_dict[bucket_owner][bucket_name].keys():
-                    self.usage_dict[bucket_owner][bucket_name][category_name] = Counter()
+                    self.usage_dict[bucket_owner][bucket_name][category_name] = Counter(
+                    )
                 c = self.usage_dict[bucket_owner][bucket_name][category_name]
-                c.update({'ops':category['ops'],
-                          'successful_ops':category['successful_ops'],
-                          'bytes_sent':category['bytes_sent'],
-                          'bytes_received':category['bytes_received']})
+                c.update({'ops': category['ops'],
+                          'successful_ops': category['successful_ops'],
+                          'bytes_sent': category['bytes_sent'],
+                          'bytes_received': category['bytes_received']})
 
     def _update_usage_metrics(self):
         """
@@ -270,19 +268,19 @@ class RADOSGWCollector(object):
                     data_dict = self.usage_dict[bucket_owner][bucket_name][category]
                     self._prometheus_metrics['ops'].add_metric(
                         [bucket_name, bucket_owner, category, self.cluster_name],
-                            data_dict['ops'])
+                        data_dict['ops'])
 
                     self._prometheus_metrics['successful_ops'].add_metric(
                         [bucket_name, bucket_owner, category, self.cluster_name],
-                            data_dict['successful_ops'])
+                        data_dict['successful_ops'])
 
                     self._prometheus_metrics['bytes_sent'].add_metric(
                         [bucket_name, bucket_owner, category, self.cluster_name],
-                            data_dict['bytes_sent'])
+                        data_dict['bytes_sent'])
 
                     self._prometheus_metrics['bytes_received'].add_metric(
                         [bucket_name, bucket_owner, category, self.cluster_name],
-                            data_dict['bytes_received'])
+                        data_dict['bytes_received'])
 
     def _get_bucket_usage(self, bucket):
         """
@@ -290,8 +288,7 @@ class RADOSGWCollector(object):
         Some skips and adjustments for various Ceph releases.
         """
 
-        if DEBUG:
-            print(json.dumps(bucket, indent=4, sort_keys=True))
+        logger.debug(json.dumps(bucket, indent=4, sort_keys=True))
 
         if type(bucket) is dict:
             bucket_name = bucket['bucket']
@@ -317,39 +314,37 @@ class RADOSGWCollector(object):
                 if 'num_objects' in bucket['usage']['rgw.main']:
                     bucket_usage_objects = bucket['usage']['rgw.main']['num_objects']
 
-
             if 'zonegroup' in bucket:
                 bucket_zonegroup = bucket['zonegroup']
             # Hammer
             else:
                 bucket_zonegroup = "0"
 
-
             self._prometheus_metrics['bucket_usage_bytes'].add_metric(
                 [bucket_name, bucket_owner, bucket_zonegroup, self.cluster_name],
-                    bucket_usage_bytes)
+                bucket_usage_bytes)
 
             self._prometheus_metrics['bucket_utilized_bytes'].add_metric(
                 [bucket_name, bucket_owner, bucket_zonegroup, self.cluster_name],
-                    bucket_utilized_bytes)
+                bucket_utilized_bytes)
 
             self._prometheus_metrics['bucket_usage_objects'].add_metric(
                 [bucket_name, bucket_owner, bucket_zonegroup, self.cluster_name],
-                    bucket_usage_objects)
+                bucket_usage_objects)
 
             if 'bucket_quota' in bucket:
                 self._prometheus_metrics['bucket_quota_enabled'].add_metric(
                     [bucket_name, bucket_owner, bucket_zonegroup, self.cluster_name],
-                        bucket['bucket_quota']['enabled'])
+                    bucket['bucket_quota']['enabled'])
                 self._prometheus_metrics['bucket_quota_max_size'].add_metric(
                     [bucket_name, bucket_owner, bucket_zonegroup, self.cluster_name],
-                        bucket['bucket_quota']['max_size'])
+                    bucket['bucket_quota']['max_size'])
                 self._prometheus_metrics['bucket_quota_max_size_bytes'].add_metric(
                     [bucket_name, bucket_owner, bucket_zonegroup, self.cluster_name],
-                        bucket['bucket_quota']['max_size_kb'] * 1024)
+                    bucket['bucket_quota']['max_size_kb'] * 1024)
                 self._prometheus_metrics['bucket_quota_max_objects'].add_metric(
                     [bucket_name, bucket_owner, bucket_zonegroup, self.cluster_name],
-                        bucket['bucket_quota']['max_objects'])
+                    bucket['bucket_quota']['max_objects'])
 
         else:
             # Hammer junk, just skip it
@@ -366,7 +361,8 @@ class RADOSGWCollector(object):
             return rgw_users['keys']
         else:
             # Compat with old Ceph versions (pre 12.2.13/13.2.9)
-            rgw_metadata_users = self._request_data(query='metadata/user', args='')
+            rgw_metadata_users = self._request_data(
+                query='metadata/user', args='')
             return rgw_metadata_users
 
         return
@@ -375,10 +371,10 @@ class RADOSGWCollector(object):
         """
         Method to get the quota set on a specific user(s).
         """
-        quota = self._request_data(query='user', args="quota&uid={0}&quota-type=user".format(user))
+        quota = self._request_data(
+            query='user', args="quota&uid={0}&quota-type=user".format(user))
 
-        if DEBUG:
-            print(json.dumps(quota, indent=4, sort_keys=True))
+        logger.debug(json.dumps(quota, indent=4, sort_keys=True))
 
         self._prometheus_metrics['user_quota_enabled'].add_metric(
             [user, self.cluster_name], quota['enabled'])
@@ -393,10 +389,10 @@ class RADOSGWCollector(object):
         """
         Method to get the info on a specific user(s).
         """
-        user_info = self._request_data(query='user', args="uid={0}&stats=True".format(user))
+        user_info = self._request_data(
+            query='user', args="uid={0}&stats=True".format(user))
 
-        if DEBUG:
-            print(json.dumps(user_info, indent=4, sort_keys=True))
+        logger.debug(json.dumps(user_info, indent=4, sort_keys=True))
 
         if 'display_name' in user_info:
             user_display_name = user_info['display_name']
@@ -420,6 +416,7 @@ class RADOSGWCollector(object):
                 [user, self.cluster_name], user_info['stats']['size_actual'])
             self._prometheus_metrics['user_total_objects'].add_metric(
                 [user, self.cluster_name], user_info['stats']['num_objects'])
+
 
 def parse_args():
     parser = argparse.ArgumentParser(
@@ -470,12 +467,24 @@ def parse_args():
         default=os.environ.get('CLUSTER_NAME', 'ceph'),
     )
 
+    parser.add_argument(
+        '-d', '--debug',
+        required=False,
+        action='store_true',
+        help='Debug',
+        default=os.environ.get('DEBUG', '0') == '1',
+    )
+
     return parser.parse_args()
 
 
 def main():
     try:
         args = parse_args()
+
+        if args.debug:
+            logging.basicConfig(level=logging.DEBUG)
+
         REGISTRY.register(RADOSGWCollector(
             args.host, args.admin_entry, args.access_key, args.secret_key, args.cluster, args.insecure))
         start_http_server(args.port)
