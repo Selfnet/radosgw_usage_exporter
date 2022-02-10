@@ -18,8 +18,8 @@ build_container:
     - export REGISTRY_AUTH_FILE=${HOME}/auth.json
     - echo "$CI_REGISTRY_PASSWORD" | buildah login -u "$CI_REGISTRY_USER" --password-stdin $CI_REGISTRY
   script:
-    - buildah bud -t $CI_REGISTRY_IMAGE:latest .
-    - if [ "$CI_COMMIT_REF_NAME" == "main" ]; then buildah push $CI_REGISTRY_IMAGE:latest; fi
+    - buildah bud -t $CI_REGISTRY_IMAGE/radosgw-exporter:latest .
+    - if [ "$CI_COMMIT_REF_NAME" == "main" ]; then buildah push $CI_REGISTRY_IMAGE/radosgw-exporter:latest; fi
 
 release_build:
   image: quay.io/redhat-github-actions/buildah-runner:latest
@@ -28,7 +28,7 @@ release_build:
     - export BUILDAH_FORMAT=docker
     - echo "$CI_REGISTRY_PASSWORD" | buildah login -u "$CI_REGISTRY_USER" --password-stdin $CI_REGISTRY
   script:
-    - buildah bud -t $CI_REGISTRY_IMAGE:$CI_COMMIT_REF_NAME .
-    - buildah push $CI_REGISTRY_IMAGE:$CI_COMMIT_REF_NAME
+    - buildah bud -t $CI_REGISTRY_IMAGE/radosgw-exporter:$CI_COMMIT_REF_NAME .
+    - buildah push $CI_REGISTRY_IMAGE/radosgw-exporter:$CI_COMMIT_REF_NAME
   only:
     - tags
