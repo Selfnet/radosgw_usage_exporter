@@ -11,11 +11,14 @@ WORKDIR /usr/src/app
 COPY requirements.txt /usr/src/app
 RUN pip install --no-cache-dir -r requirements.txt
 
-COPY radosgw_usage_exporter.py /usr/src/app
+COPY radosgw_usage_exporter.py wsgi.py /usr/src/app
+
 
 USER $UNAME
 
+ENV RADOSGW_SERVER=http://radosgw:80
+ENV VIRTUAL_PORT=9242
+ENV DEBUG=0
 EXPOSE 9242
-ENV RADOSGW_SERVER=http://radosgw:80 VIRTUAL_PORT=9242 DEBUG=0
 
-CMD [ "python", "-u", "./radosgw_usage_exporter.py" ]
+CMD gunicorn --workers=1 wsgi:exporter -b [::]:$VIRTUAL_PORT
