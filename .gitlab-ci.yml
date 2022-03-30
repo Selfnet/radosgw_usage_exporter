@@ -11,21 +11,18 @@ flake8:
     - flake8 .
 
 build_container:
-  image: quay.io/redhat-github-actions/buildah-runner:latest
+  image: rotterdam.selfnet.de/noc/container-build/container-build:latest
   stage: build
   before_script:
-    - export BUILDAH_FORMAT=docker
-    - export REGISTRY_AUTH_FILE=${HOME}/auth.json
     - echo "$CI_REGISTRY_PASSWORD" | buildah login -u "$CI_REGISTRY_USER" --password-stdin $CI_REGISTRY
   script:
     - buildah bud -t $CI_REGISTRY_IMAGE/radosgw-exporter:latest .
     - if [ "$CI_COMMIT_REF_NAME" == "main" ]; then buildah push $CI_REGISTRY_IMAGE/radosgw-exporter:latest; fi
 
 release_build:
-  image: quay.io/redhat-github-actions/buildah-runner:latest
+  image: rotterdam.selfnet.de/noc/container-build/container-build:latest
   stage: build
   before_script:
-    - export BUILDAH_FORMAT=docker
     - echo "$CI_REGISTRY_PASSWORD" | buildah login -u "$CI_REGISTRY_USER" --password-stdin $CI_REGISTRY
   script:
     - buildah bud -t $CI_REGISTRY_IMAGE/radosgw-exporter:$CI_COMMIT_REF_NAME .
